@@ -151,6 +151,10 @@ This exists because desktop models on `inference.hermesone.org` are saved as bar
 
 A provider's config modal manages the models it serves — the **only** place models are added/edited, since there is no standalone Models screen. The provider→models hierarchy lives in one place instead of a separate flat list.
 
+### Transport-consistent attachment identity
+
+Local, Dashboard, and legacy SSH model-library writes identify an attachment by provider + model id + normalized base URL. This lets two custom endpoints expose the same model id while trailing-slash or URL-case variants remain idempotent.
+
 [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] renders below the key field in the config modal: a key-status line, the model pills, and an add-input. It reads/writes the same `models.json` library the chat picker reads (`listModels`/`addModel`/`removeModel`, and re-syncs on `onModelLibraryChanged`), so added models immediately appear in the chat model picker. Models show as chips with a remove button and a **pencil** that opens a small editor for the model's shared definition (display name + context window — see [[model-context]]); because the definition is keyed by model id, editing it under one provider reflects under every provider serving that id. The add-input autocompletes off live discovery and strips whitespace as typed/pasted (model IDs never contain spaces, so `"hello there"` can't be saved).
 
 The single [[src/renderer/src/hooks/useDiscoveredModels.ts#useDiscoveredModels]] call does double duty: it feeds the add-input's `<datalist>` **and** drives the "Connected · key verified" status line — a `status: "ok"` means the endpoint accepted the key and returned a model list, so the "verified" claim is truthful. `unsupported`/`unknown-host` degrade to a plain "Connected" (key set, list not exposed), `error` to "Couldn't verify key", and an empty key to "Add a key to connect".

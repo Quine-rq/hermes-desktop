@@ -3522,8 +3522,13 @@ export async function sshAddModel(
   baseUrl: string,
 ): Promise<SavedModel> {
   const models = await sshListModels(config);
+  const norm = (url: string): string =>
+    (url || "").trim().replace(/\/+$/, "").toLowerCase();
   const existing = models.find(
-    (m) => m.model === model && m.provider === provider,
+    (m) =>
+      m.model === model &&
+      m.provider === provider &&
+      norm(m.baseUrl) === norm(baseUrl),
   );
   if (existing) return existing;
   const entry: SavedModel = {
