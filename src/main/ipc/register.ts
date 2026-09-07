@@ -27,6 +27,7 @@ import {
   discoverProviderModels,
   getModelContextWindow,
 } from "../model-discovery";
+import { resolveActiveModelContextWindow } from "../model-context";
 import {
   persistSessionContinuation,
   persistSessionLocalError,
@@ -1949,9 +1950,10 @@ export function registerIpcHandlers(context: IpcContext): void {
     },
   );
 
-  // Authoritative context-window size for the active model (issue #597).
-  // Resolves the real `context_length` from the provider's /models catalogue;
-  // returns null when unavailable so the renderer falls back to its heuristic.
+  // Authoritative context-window size for the active model (issues #597/#918).
+  // Remote/SSH connections consult their own active config first; local and
+  // missing-override paths retain provider /models discovery. Returns null
+  // when unavailable so the renderer falls back to its heuristic.
   ipcMain.handle(
     "get-model-context-window",
     (
@@ -1961,13 +1963,42 @@ export function registerIpcHandlers(context: IpcContext): void {
       baseUrl: string | undefined,
       profile?: string,
     ) => {
-      return getModelContextWindow(
-        provider,
-        model,
-        baseUrl,
-        undefined,
-        profile,
-      );
+      const fallback = (): Promise<number | null> =>
+        getModelContextWindow(provider, model, baseUrl, undefined, profile);
+      const conn = getConnectionConfig();
+      if (conn.mode === "remote") {
+        return withRemoteDashboard(
+          conn,
+          () =>
+            resolveActiveModelContextWindow(
+              model,
+              () => remoteGetModelConfig(conn),
+              fallback,
+            ),
+          fallback,
+        );
+      }
+      if (conn.mode === "ssh" && conn.ssh) {
+        const sshProfile = activeSshProfile(profile);
+        const sshFallback = (): Promise<number | null> =>
+          resolveActiveModelContextWindow(
+            model,
+            () => sshGetModelConfig(conn.ssh!, sshProfile),
+            fallback,
+          );
+        return withSshDashboardSessions(
+          conn,
+          (config) =>
+            resolveActiveModelContextWindow(
+              model,
+              () => remoteGetModelConfig(config),
+              sshFallback,
+            ),
+          sshFallback,
+          sshProfile,
+        );
+      }
+      return fallback();
     },
   );
 

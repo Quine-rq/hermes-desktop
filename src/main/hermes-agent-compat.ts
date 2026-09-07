@@ -133,13 +133,18 @@ def _hermes_one_current_model_row():
         provider = str(model_cfg.get("provider", "") or "").strip()
         model = str(model_cfg.get("default", model_cfg.get("name", "")) or "").strip()
         base_url = str(model_cfg.get("base_url", "") or "").strip()
+        try:
+            context_length = int(model_cfg.get("context_length") or 0)
+        except (TypeError, ValueError):
+            context_length = 0
     else:
         provider = ""
         model = str(model_cfg or "").strip()
         base_url = ""
+        context_length = 0
     if not provider or not model:
         return None
-    return {
+    row = {
         "id": f"remote:active:{provider}:{model}",
         "name": _hermes_one_short_model_label(model) or provider,
         "provider": provider,
@@ -147,6 +152,9 @@ def _hermes_one_current_model_row():
         "baseUrl": base_url,
         "createdAt": 0,
     }
+    if context_length > 0:
+        row["contextLength"] = context_length
+    return row
 
 
 @app.get("/api/model/library")

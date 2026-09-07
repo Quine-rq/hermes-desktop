@@ -96,6 +96,7 @@ mount_spa(app)
     expect(result.source).toContain("HERMES_ONE_MODEL_LIBRARY_COMPAT_V1");
     expect(result.source).toContain('@app.get("/api/model/library")');
     expect(result.source).toContain('@app.post("/api/model/library")');
+    expect(result.source).toContain('row["contextLength"] = context_length');
     expect(result.source).toContain(
       '@app.patch("/api/model/library/{model_id:path}")',
     );

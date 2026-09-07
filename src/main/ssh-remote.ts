@@ -1325,17 +1325,36 @@ export function sshGetHermesHome(_config: SshConfig, profile?: string): string {
 export async function sshGetModelConfig(
   config: SshConfig,
   profile?: string,
-): Promise<{ provider: string; model: string; baseUrl: string }> {
+): Promise<{
+  provider: string;
+  model: string;
+  baseUrl: string;
+  contextLength?: number;
+}> {
   // Use dotted paths so the lookup is scoped to the `model:` block. The
   // previous flat keys `provider` / `default` / `base_url` would each
   // match the first occurrence at any indent — typically picking up
   // `personalities.default` or `auxiliary.vision.provider` and reporting
   // them as the model fields (#240).
+  // Read once: each sshReadFile is a real SSH process, so fetching four
+  // sibling fields independently adds avoidable latency to every model read.
+  const content = await sshReadFile(config, remoteConfigPath(profile));
+  const read = (key: string): string =>
+    (content && locateInYaml(content, key)?.value) || "";
+  const rawContextLength = read("model.context_length").trim();
+  const parsedContextLength = rawContextLength
+    ? Number(rawContextLength)
+    : Number.NaN;
+  const contextLength =
+    Number.isFinite(parsedContextLength) && parsedContextLength > 0
+      ? Math.floor(parsedContextLength)
+      : undefined;
+
   return {
-    provider:
-      (await sshGetConfigValue(config, "model.provider", profile)) || "auto",
-    model: (await sshGetConfigValue(config, "model.default", profile)) || "",
-    baseUrl: (await sshGetConfigValue(config, "model.base_url", profile)) || "",
+    provider: read("model.provider") || "auto",
+    model: read("model.default"),
+    baseUrl: read("model.base_url"),
+    ...(contextLength !== undefined ? { contextLength } : {}),
   };
 }
 
