@@ -60,6 +60,14 @@ Renderer IPC handlers are isolated from app bootstrap so the registry can be spl
 
 Wallet and token-balance handlers sit in the same registry: `list-wallets`, `create-wallet`, `import-wallet`, `rename-wallet`, `delete-wallet` (backed by [[wallet-token-balances#Wallet Store]]) and `get-token-balances` (backed by [[wallet-token-balances#Token Balances]]).
 
+## Platform enable overrides
+
+Messaging platform availability combines credentials from `.env` with an optional direct-child `<platform>.enabled` override in `config.yaml`.
+
+[[src/main/config.ts#getPlatformEnabled]] ignores nested `enabled` keys, such as `discord.voice_fx.enabled`, so feature-specific settings cannot disable the whole platform.
+
+[[src/main/config.ts#setPlatformEnabled]] edits only the platform block's direct `enabled` child. It preserves unrelated YAML and the file's existing LF or CRLF line endings, and leaves the file byte-identical when the requested enabled state is already the default. This matters at application startup, where merely reading and reconciling a configured platform must not rewrite or corrupt a shared Windows `config.yaml`.
+
 ## Voice transcription IPC
 
 Speech-to-text IPC sends recorded desktop audio through the Hermes API server, not through the active chat model endpoint.
