@@ -98,6 +98,36 @@ mount_spa(app)
     expect(result.source).toContain('@app.post("/api/model/library")');
     expect(result.source).toContain('row["contextLength"] = context_length');
     expect(result.source).toContain(
+      "def _hermes_one_model_library_path(profile=None)",
+    );
+    expect(result.source).toContain(
+      "def _hermes_one_current_model_row(profile=None)",
+    );
+    expect(result.source).toContain(
+      "token = set_hermes_home_override(_hermes_one_profile_home(profile))",
+    );
+    expect(result.source).toContain(
+      "def hermes_one_get_model_library(profile: Optional[str] = None)",
+    );
+    expect(result.source).toContain(
+      "rows = _hermes_one_read_model_library(profile)",
+    );
+    expect(result.source).toContain(
+      "current = _hermes_one_current_model_row(profile)",
+    );
+    expect(result.source).toContain(
+      "def hermes_one_add_model_library_row(body: Dict[str, Any], profile: Optional[str] = None)",
+    );
+    expect(result.source).toContain(
+      "def hermes_one_update_model_library_row(model_id: str, body: Dict[str, Any], profile: Optional[str] = None)",
+    );
+    expect(result.source).toContain(
+      "def hermes_one_delete_model_library_row(model_id: str, profile: Optional[str] = None)",
+    );
+    expect(result.source).toContain(
+      "_hermes_one_write_model_library(rows, profile)",
+    );
+    expect(result.source).toContain(
       '@app.patch("/api/model/library/{model_id:path}")',
     );
     expect(result.source).toContain(
