@@ -153,7 +153,9 @@ A provider's config modal manages the models it serves — the **only** place mo
 
 ### Transport-consistent attachment identity
 
-Local, Dashboard, and legacy SSH model-library writes identify an attachment by provider + model id + normalized base URL. This lets two custom endpoints expose the same model id while trailing-slash or URL-case variants remain idempotent.
+Local, Dashboard, and legacy SSH model-library writes identify an attachment by provider + model id + normalized base URL.
+
+URL schemes and hosts are case-insensitive and trailing path slashes are ignored, while case-sensitive path, query, credential, and fragment components remain distinct. This lets two custom endpoints expose the same model id without collapsing separate routes.
 
 [[src/renderer/src/components/ProviderKeysSection.tsx#ProviderModelsManager]] renders below the key field in the config modal: a key-status line, the model pills, and an add-input. It reads/writes the same `models.json` library the chat picker reads (`listModels`/`addModel`/`removeModel`, and re-syncs on `onModelLibraryChanged`), so added models immediately appear in the chat model picker. Models show as chips with a remove button and a **pencil** that opens a small editor for the model's shared definition (display name + context window — see [[model-context]]); because the definition is keyed by model id, editing it under one provider reflects under every provider serving that id. The add-input autocompletes off live discovery and strips whitespace as typed/pasted (model IDs never contain spaces, so `"hello there"` can't be saved).
 

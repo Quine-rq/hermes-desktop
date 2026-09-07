@@ -6,6 +6,7 @@ import { safeWriteFile, profilePaths } from "./utils";
 import { hostDerivedEnvKeyForUrl } from "./host-derived-env";
 import { mirrorFirstPartyAgentProviders } from "./agent-config-providers";
 import { customProviderEnvKey } from "../shared/url-key-map";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import DEFAULT_MODELS from "./default-models";
 
 const MODELS_FILE = join(HERMES_HOME, "models.json");
@@ -385,8 +386,6 @@ export function syncAgentConfigModels(profile?: string): void {
   }
   if (cpModels.length === 0) return;
 
-  const norm = (u: string): string =>
-    (u || "").trim().replace(/\/+$/, "").toLowerCase();
   const models = readModelsRaw();
   let modified = false;
   for (const cp of cpModels) {
@@ -394,7 +393,8 @@ export function syncAgentConfigModels(profile?: string): void {
       (m) =>
         m.model === cp.model &&
         m.provider === cp.provider &&
-        norm(m.baseUrl) === norm(cp.baseUrl),
+        normalizeModelEndpointUrl(m.baseUrl) ===
+          normalizeModelEndpointUrl(cp.baseUrl),
     );
     if (!exists) {
       models.push({
@@ -465,13 +465,12 @@ export function addModel(
 
   // Dedup: same model ID + provider + base URL. Base URL is part of the key so
   // the same model id can live under two different custom endpoints.
-  const norm = (u: string): string =>
-    (u || "").trim().replace(/\/+$/, "").toLowerCase();
   const existing = models.find(
     (m) =>
       m.model === model &&
       m.provider === provider &&
-      norm(m.baseUrl) === norm(baseUrl),
+      normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(baseUrl),
   );
   if (existing)
     return {

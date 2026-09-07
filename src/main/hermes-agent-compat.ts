@@ -69,11 +69,38 @@ def _hermes_one_short_model_label(model):
     return (text.rsplit("/", 1)[-1] if text else "") or text
 
 
+def _hermes_one_normalize_base_url(value):
+    from urllib.parse import urlsplit, urlunsplit
+    text = str(value or "").strip()
+    if not text:
+        return ""
+    try:
+        parsed = urlsplit(text)
+        if not parsed.scheme or not parsed.hostname:
+            return text.rstrip("/")
+        scheme = parsed.scheme.lower()
+        hostname = parsed.hostname.lower()
+        if ":" in hostname:
+            hostname = f"[{hostname}]"
+        credentials = ""
+        if parsed.username is not None:
+            credentials = parsed.username
+            if parsed.password is not None:
+                credentials += f":{parsed.password}"
+            credentials += "@"
+        port = parsed.port
+        default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
+        netloc = credentials + hostname + (f":{port}" if port and not default_port else "")
+        return urlunsplit((scheme, netloc, parsed.path.rstrip("/"), parsed.query, parsed.fragment))
+    except ValueError:
+        return text.rstrip("/")
+
+
 def _hermes_one_model_key(row):
     return (
         str(row.get("provider", "")).strip().lower(),
         str(row.get("model", "")).strip().lower(),
-        str(row.get("baseUrl", row.get("base_url", ""))).strip().rstrip("/").lower(),
+        _hermes_one_normalize_base_url(row.get("baseUrl", row.get("base_url", ""))),
     )
 
 
@@ -168,7 +195,7 @@ def hermes_one_add_model_library_row(body: Dict[str, Any]):
     base_url = str(body.get("baseUrl", body.get("base_url", "")) or "").strip()
     name = str(body.get("name", "") or "").strip() or _hermes_one_short_model_label(model) or provider
     rows = _hermes_one_read_model_library()
-    key = (provider.lower(), model.lower(), base_url.rstrip("/").lower())
+    key = (provider.lower(), model.lower(), _hermes_one_normalize_base_url(base_url))
     for row in rows:
         if _hermes_one_model_key(row) == key:
             return row

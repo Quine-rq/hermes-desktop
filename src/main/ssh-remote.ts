@@ -22,6 +22,7 @@ import type { HistoryItem, SessionSummary, SearchResult } from "./sessions";
 import type { CachedSession } from "./session-cache";
 import type { Attachment } from "../shared/attachments";
 import { isImageMime, MAX_IMAGE_BYTES } from "../shared/attachments";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 import type { ToolsetInfo } from "./tools";
 import {
   extractLeadingVisionImageFallback,
@@ -3522,13 +3523,12 @@ export async function sshAddModel(
   baseUrl: string,
 ): Promise<SavedModel> {
   const models = await sshListModels(config);
-  const norm = (url: string): string =>
-    (url || "").trim().replace(/\/+$/, "").toLowerCase();
   const existing = models.find(
     (m) =>
       m.model === model &&
       m.provider === provider &&
-      norm(m.baseUrl) === norm(baseUrl),
+      normalizeModelEndpointUrl(m.baseUrl) ===
+        normalizeModelEndpointUrl(baseUrl),
   );
   if (existing) return existing;
   const entry: SavedModel = {

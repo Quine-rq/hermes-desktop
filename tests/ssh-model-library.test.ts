@@ -133,4 +133,28 @@ describe("legacy SSH model library", () => {
     expect(JSON.parse(remoteFile.content)).toHaveLength(1);
     expect(spawnSpy).toHaveBeenCalledTimes(1);
   });
+
+  it("keeps endpoints whose URL paths differ only by case", async () => {
+    remoteFile.content = JSON.stringify([
+      {
+        id: "tenant-a",
+        name: "Tenant A",
+        provider: "custom",
+        model: "shared-model",
+        baseUrl: "https://api.example/v1/TenantA",
+        createdAt: 1,
+      },
+    ]);
+
+    const added = await sshAddModel(
+      config,
+      "tenant a lowercase",
+      "custom",
+      "shared-model",
+      "https://API.EXAMPLE/v1/tenanta",
+    );
+
+    expect(added.baseUrl).toBe("https://API.EXAMPLE/v1/tenanta");
+    expect(JSON.parse(remoteFile.content)).toHaveLength(2);
+  });
 });

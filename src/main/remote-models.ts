@@ -1,5 +1,6 @@
 import type { SavedModel } from "./models";
 import { remoteRequestJson, type RemoteSessionConfig } from "./remote-sessions";
+import { normalizeModelEndpointUrl } from "../shared/model-endpoint";
 
 type RemoteRecord = Record<string, unknown>;
 const REMOTE_MODEL_OPTIONS_TIMEOUT_MS = 60_000;
@@ -70,7 +71,7 @@ function dedupeModels(models: SavedModel[]): SavedModel[] {
     const key = [
       model.provider.trim().toLowerCase(),
       model.model.trim().toLowerCase(),
-      (model.baseUrl || "").trim().replace(/\/+$/, "").toLowerCase(),
+      normalizeModelEndpointUrl(model.baseUrl),
     ].join("\n");
     if (seen.has(key)) continue;
     seen.add(key);
@@ -249,8 +250,8 @@ export async function remoteSetModelConfig(
       last.provider === provider &&
       last.model === model &&
       (provider !== "custom" ||
-        (last.baseUrl || "").replace(/\/+$/, "") ===
-          (baseUrl || "").replace(/\/+$/, ""))
+        normalizeModelEndpointUrl(last.baseUrl) ===
+          normalizeModelEndpointUrl(baseUrl))
     ) {
       return true;
     }

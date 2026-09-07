@@ -17,6 +17,7 @@ import type { Attachment } from "../../shared/attachments";
 import type { SessionModelOverride } from "../../shared/model-override";
 import type { SessionLocation } from "../../shared/session-location";
 import type { AppLocale } from "../../shared/i18n/types";
+import { normalizeModelEndpointUrl } from "../../shared/model-endpoint";
 import type {
   DesktopSessionContinuationItem,
   DesktopSessionLocalError,
@@ -718,10 +719,11 @@ function resolveLibraryModelEntry(
     (m) => m.provider === provider && m.model === model,
   );
   if (matches.length <= 1) return matches[0];
-  const norm = (u: string | undefined): string =>
-    (u || "").trim().replace(/\/+$/, "");
-  const target = norm(baseUrl);
-  return matches.find((m) => norm(m.baseUrl) === target) ?? matches[0];
+  const target = normalizeModelEndpointUrl(baseUrl);
+  return (
+    matches.find((m) => normalizeModelEndpointUrl(m.baseUrl) === target) ??
+    matches[0]
+  );
 }
 
 export function registerIpcHandlers(context: IpcContext): void {
