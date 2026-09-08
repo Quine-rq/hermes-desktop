@@ -156,27 +156,13 @@ vi.mock("better-sqlite3", () => {
       throw new Error(`Unhandled fake run SQL: ${this.sql}`);
     }
 
-    all(
-      ...args: unknown[]
-    ): SessionRow[] | Array<{ id: string; message_count: number }> {
+    all(): SessionRow[] {
+      // These legacy fixtures predate the Agent's archive column.
+      if (this.sql === "PRAGMA table_info(sessions)") return [];
       if (this.sql.includes("FROM sessions s")) {
-        const threshold = Number(args[0] ?? 0);
-        return Array.from(this.store.sessions.values())
-          .filter((session) => session.started_at > threshold)
-          .sort((a, b) => b.started_at - a.started_at);
-      }
-
-      // Phase-2 refresh query introduced for issue #226:
-      //   SELECT id, message_count FROM sessions WHERE id IN (?, ?, …)
-      if (
-        this.sql.includes("SELECT id, message_count FROM sessions") &&
-        this.sql.includes("WHERE id IN")
-      ) {
-        const ids = args.map(String);
-        return ids
-          .map((id) => this.store.sessions.get(id))
-          .filter((s): s is SessionRow => !!s)
-          .map((s) => ({ id: s.id, message_count: s.message_count }));
+        return Array.from(this.store.sessions.values()).sort(
+          (a, b) => b.started_at - a.started_at,
+        );
       }
 
       // Context-folder batch read (issue #27). These tests never seed linked
@@ -411,8 +397,7 @@ describe("syncSessionCache", () => {
   });
 
   it("updates messageCount on existing sessions without duplicating them (issue #16 regression)", () => {
-    // Use a future started_at so the 5-minute incremental sync window
-    // (lastSync - 300) still catches the row on the second sync.
+    // A future timestamp must not create a duplicate on subsequent syncs.
     const future = Math.floor(Date.now() / 1000) + 600;
     seedDb([
       {
@@ -471,12 +456,9 @@ describe("syncSessionCache", () => {
     expect(result.map((r) => r.id)).toEqual(["s2", "s1"]);
   });
 
-  it("refreshes messageCount for old sessions outside the lastSync window (issue #226)", () => {
-    // Session started well before the 5-minute incremental sync window
-    // looks (lastSync - 300). Without the Phase 2 refresh, the cache
-    // pegs messageCount at whatever was first observed — the user
-    // reports the symptom as "messageCount records only 15 messages
-    // when there are actually 200+".
+  it("refreshes messageCount even when creation time is unchanged (issue #226)", () => {
+    // Old conversations can keep accumulating messages. A creation-time
+    // cursor alone would leave their counts stuck at the first observed value.
     const oldStart = Math.floor(Date.now() / 1000) - 86400 * 30; // 30 days ago
     seedDb([
       {
@@ -507,8 +489,7 @@ describe("syncSessionCache", () => {
     expect(second).toHaveLength(1);
     expect(second[0].id).toBe("old-session");
     expect(second[0].messageCount).toBe(200);
-    // Title and other metadata are preserved (Phase 2 only touches the
-    // count field — no re-running of title generation).
+    // A generated title is reused without rereading the first user message.
     expect(second[0].title).toContain("first");
   });
 
@@ -557,9 +538,8 @@ describe("syncSessionCache", () => {
   });
 
   it("refreshes some old, leaves others untouched, all in one sync", () => {
-    // Mix: one session inside the lastSync window (handled by Phase 1)
-    // and two outside it (handled by Phase 2). All three counts grow
-    // between syncs; both phases should keep the cache accurate.
+    // Mix old and future-dated sessions. Counts must stay accurate for
+    // all of them, independent of their creation times.
     const now = Math.floor(Date.now() / 1000);
     const oldA = now - 86400 * 7;
     const oldB = now - 86400 * 3;

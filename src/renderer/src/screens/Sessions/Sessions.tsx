@@ -421,17 +421,25 @@ function Sessions({
   // loading state, so it can run on a timer or on focus with no spinner flash.
   const refreshSessions = useCallback(async (): Promise<void> => {
     const requestId = ++loadRequestId.current;
-    const synced = await window.hermesAPI.syncSessionCache(
-      connectionId,
-      profile,
-    );
-    if (loadRequestId.current !== requestId) return;
-    setSessions((prev) => {
-      if (synced.length === 0 && prev.length > 0) {
-        return prev;
+    try {
+      const synced = await window.hermesAPI.syncSessionCache(
+        connectionId,
+        profile,
+      );
+      if (loadRequestId.current !== requestId) return;
+      if (synced.length === 0) {
+        // Local sync reconciles the complete visible set, including an empty
+        // set after the last session is archived. Keep the transient-empty
+        // guard for network-backed lists, whose failure can look like [].
+        const config = await window.hermesAPI.getConnectionConfig(connectionId);
+        if (config.mode !== "local") return;
       }
-      return synced.slice(0, 50);
-    });
+      if (loadRequestId.current !== requestId) return;
+      setSessions(synced.slice(0, 50));
+    } catch (error) {
+      // Preserve the last visible list; the next focus/timer tick can retry.
+      console.error("Failed to refresh sessions", error);
+    }
   }, [connectionId, profile]);
 
   const loadSessions = useCallback(async (): Promise<void> => {

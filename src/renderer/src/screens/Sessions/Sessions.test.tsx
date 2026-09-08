@@ -30,6 +30,7 @@ const baseProps = {
 function installHermesAPI(initialSessions: unknown[] = []): {
   listCachedSessions: ReturnType<typeof vi.fn>;
   syncSessionCache: ReturnType<typeof vi.fn>;
+  getConnectionConfig: ReturnType<typeof vi.fn>;
   searchSessions: ReturnType<typeof vi.fn>;
   updateSessionTitle: ReturnType<typeof vi.fn>;
   deleteSession: ReturnType<typeof vi.fn>;
@@ -40,6 +41,7 @@ function installHermesAPI(initialSessions: unknown[] = []): {
   const api = {
     listCachedSessions: vi.fn().mockResolvedValue(initialSessions),
     syncSessionCache: vi.fn().mockResolvedValue(initialSessions),
+    getConnectionConfig: vi.fn().mockResolvedValue({ mode: "ssh" }),
     searchSessions: vi.fn().mockResolvedValue([]),
     updateSessionTitle: vi.fn().mockResolvedValue(undefined),
     deleteSession: vi.fn().mockResolvedValue(undefined),
@@ -235,6 +237,116 @@ describe("Sessions tab live refresh (#322)", () => {
 
     expect(screen.getByText("SSH session")).toBeTruthy();
     expect(screen.queryByText("sessions.empty")).toBeNull();
+  });
+
+  it("removes the last native-archived local session and shows it again on restore", async () => {
+    const rows = [
+      {
+        id: "local-session",
+        title: "Local chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ];
+    const api = installHermesAPI(rows);
+    api.getConnectionConfig.mockResolvedValue({ mode: "local" });
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    expect(screen.getByText("Local chat")).toBeTruthy();
+
+    api.syncSessionCache.mockResolvedValue([]);
+    await act(async () => {
+      vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+    });
+    expect(screen.queryByText("Local chat")).toBeNull();
+    expect(screen.getByText("sessions.empty")).toBeTruthy();
+    expect(api.getConnectionConfig).toHaveBeenCalledWith("connection-one");
+
+    api.syncSessionCache.mockResolvedValue(rows);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    expect(screen.getByText("Local chat")).toBeTruthy();
+  });
+
+  it("preserves visible rows when confirming a local empty refresh fails, then retries", async () => {
+    const api = installHermesAPI([
+      {
+        id: "local-session",
+        title: "Local chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+    render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    api.syncSessionCache.mockResolvedValue([]);
+    api.getConnectionConfig.mockRejectedValueOnce(
+      new Error("Connection unavailable"),
+    );
+    const errors = vi.spyOn(console, "error").mockImplementation(() => {});
+    try {
+      await act(async () => {
+        vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+      });
+      expect(screen.getByText("Local chat")).toBeTruthy();
+      api.getConnectionConfig.mockResolvedValue({ mode: "local" });
+      await act(async () => {
+        vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+      });
+      expect(screen.queryByText("Local chat")).toBeNull();
+    } finally {
+      errors.mockRestore();
+    }
+  });
+
+  it("does not apply an old empty refresh after switching profiles", async () => {
+    const api = installHermesAPI([
+      {
+        id: "local-session",
+        title: "Old profile chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+    const view = render(<Sessions {...baseProps} visible={true} />);
+    await act(async () => {});
+    let resolveConfig!: (value: { mode: "local" }) => void;
+    api.getConnectionConfig.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveConfig = resolve;
+      }),
+    );
+    api.syncSessionCache.mockResolvedValueOnce([]);
+    await act(async () => {
+      vi.advanceTimersByTime(SESSIONS_REFRESH_MS);
+    });
+    expect(api.getConnectionConfig).toHaveBeenCalledWith("connection-one");
+
+    api.syncSessionCache.mockResolvedValue([
+      {
+        id: "other-session",
+        title: "Other profile chat",
+        startedAt: 200,
+        source: "desktop",
+        messageCount: 2,
+        model: "gpt-5.5",
+      },
+    ]);
+    await act(async () => {
+      view.rerender(<Sessions {...baseProps} profile="other" visible={true} />);
+    });
+    expect(screen.getByText("Other profile chat")).toBeTruthy();
+    await act(async () => {
+      resolveConfig({ mode: "local" });
+    });
+    expect(screen.getByText("Other profile chat")).toBeTruthy();
   });
 
   it("defaults to chats and persists the automation filter", async () => {

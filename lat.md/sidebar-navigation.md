@@ -22,6 +22,18 @@ Session titles in the inline list are constrained to the sidebar width and trunc
 
 The native sidebar scrollbar is hidden to avoid layout shifts. [[src/renderer/src/screens/Layout/Layout.tsx#Layout]] measures the chat scroll container and renders an absolutely positioned overlay thumb only while the user is scrolling, so showing or hiding the scrollbar never changes row width.
 
+## Native archive visibility
+
+Local lists follow the Agent's native archive flag. Archiving hides a conversation without deleting its messages or linked project folder; restoring it makes it visible on the next sync.
+
+[[src/main/db.ts#sessionVisibilityPredicate]] detects whether the selected profile's database has an `archived` column. [[src/main/sessions.ts#listSessions]] filters `archived = 0` before pagination, while legacy databases without that column remain readable.
+
+[[src/main/session-cache.ts#syncSessionCache]] reconciles the complete visible metadata set rather than using `started_at` as a change cursor: archive and restore do not change creation time. Cached titles are reused, and message bodies are read only to generate missing titles for newly visible rows. Successful sync replaces the cached membership, including an empty set; unavailable databases or failed reads retain the last good cache until retry. [[src/main/session-cache.ts#listCachedSessions]] remains DB-free, so an initial cached paint can be stale until sync finishes. Message history and search are unchanged.
+
+[[src/renderer/src/screens/Sessions/Sessions.tsx]] accepts an empty quiet-refresh result for the explicitly selected local connection, allowing the last archived row to disappear. Network-backed lists retain their transient-empty guard. Failed connection checks retain visible rows, and request identity prevents a delayed empty result from clearing a newer profile's list.
+
+[[tests/session-archive.test.ts]] executes real SQLite queries for cold and warm caches, archive/restore without timestamp changes, pagination, equal IDs across profiles, legacy schema upgrades, read failure and recovery, and retained history/project folders. [[src/renderer/src/screens/Sessions/Sessions.test.tsx]] covers the last local row disappearing and returning, failed refresh recovery, and stale responses after profile switches.
+
 ## Project grouping
 
 Workspace-linked conversations are grouped under project rows so repository chats stay together without hiding ordinary chats.
