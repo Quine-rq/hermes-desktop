@@ -69,6 +69,24 @@ def _hermes_one_short_model_label(model):
     return (text.rsplit("/", 1)[-1] if text else "") or text
 
 
+def _hermes_one_normalize_url_path(path):
+    # Match the WHATWG URL path shortening used by the desktop's new URL().
+    # Percent-encoded dot segments are structural, but every other encoded
+    # segment and repeated slash remains part of the endpoint identity.
+    segments = str(path or "").split("/")
+    normalized = []
+    for segment in segments:
+        folded = segment.lower()
+        if folded in (".", "%2e"):
+            continue
+        if folded in ("..", ".%2e", "%2e.", "%2e%2e"):
+            if len(normalized) > 1:
+                normalized.pop()
+            continue
+        normalized.append(segment)
+    return "/".join(normalized)
+
+
 def _hermes_one_normalize_base_url(value):
     from urllib.parse import urlsplit, urlunsplit
     text = str(value or "").strip()
@@ -91,7 +109,8 @@ def _hermes_one_normalize_base_url(value):
         port = parsed.port
         default_port = (scheme == "http" and port == 80) or (scheme == "https" and port == 443)
         netloc = credentials + hostname + (f":{port}" if port and not default_port else "")
-        return urlunsplit((scheme, netloc, parsed.path.rstrip("/"), parsed.query, parsed.fragment))
+        path = _hermes_one_normalize_url_path(parsed.path).rstrip("/")
+        return urlunsplit((scheme, netloc, path, parsed.query, parsed.fragment))
     except ValueError:
         return text.rstrip("/")
 

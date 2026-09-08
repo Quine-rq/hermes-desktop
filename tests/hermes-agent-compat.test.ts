@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { execFileSync } from "child_process";
 import {
   mkdtempSync,
   readdirSync,
@@ -14,6 +15,51 @@ import {
   patchDashboardModelLibrarySource,
   writeCompatFileAtomically,
 } from "../src/main/hermes-agent-compat";
+import { normalizeModelEndpointUrl } from "../src/shared/model-endpoint";
+
+function resolvePython3(): string | null {
+  if (process.platform === "win32") return null;
+  try {
+    const out = execFileSync("/bin/sh", ["-c", "command -v python3"], {
+      encoding: "utf8",
+    }).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+const python3Path = resolvePython3();
+const itPython = python3Path ? it : it.skip;
+
+function normalizeWithInjectedPython(values: string[]): string[] {
+  const patched = patchDashboardModelLibrarySource(`
+@app.post("/api/model/set")
+async def set_model_assignment(body):
+    return {"ok": True}
+
+mount_spa(app)
+`).source;
+  const start = patched.indexOf("def _hermes_one_normalize_url_path(path):");
+  const end = patched.indexOf("\n\ndef _hermes_one_model_key", start);
+  expect(start).toBeGreaterThanOrEqual(0);
+  expect(end).toBeGreaterThan(start);
+
+  const helperSource = patched.slice(start, end);
+  const output = execFileSync(
+    python3Path as string,
+    [
+      "-c",
+      `${helperSource}\n\nimport json, sys\nfor value in json.load(sys.stdin):\n    print(json.dumps(_hermes_one_normalize_base_url(value)))`,
+    ],
+    { input: JSON.stringify(values), encoding: "utf8" },
+  );
+  return output
+    .trim()
+    .split("\n")
+    .filter(Boolean)
+    .map((line) => JSON.parse(line) as string);
+}
 
 describe("Hermes Agent dashboard compatibility patcher", () => {
   it("leaves already-compatible embedded chat defaults unchanged", () => {
@@ -96,8 +142,11 @@ mount_spa(app)
     expect(result.source).toContain("HERMES_ONE_MODEL_LIBRARY_COMPAT_V1");
     expect(result.source).toContain('@app.get("/api/model/library")');
     expect(result.source).toContain('@app.post("/api/model/library")');
+    expect(result.source).toContain("def _hermes_one_normalize_url_path");
     expect(result.source).toContain("def _hermes_one_normalize_base_url");
-    expect(result.source).toContain('parsed.path.rstrip("/")');
+    expect(result.source).toContain(
+      '_hermes_one_normalize_url_path(parsed.path).rstrip("/")',
+    );
     expect(result.source).toContain(
       '@app.patch("/api/model/library/{model_id:path}")',
     );
@@ -107,6 +156,36 @@ mount_spa(app)
     expect(
       result.source.indexOf('@app.get("/api/model/library")'),
     ).toBeLessThan(result.source.indexOf("mount_spa(app)"));
+  });
+
+  itPython("normalizes path dot segments like the desktop URL parser", () => {
+    const values = [
+      "https://host/a/../v1",
+      "https://host/a/./v1",
+      "https://host/a/%2e/v1",
+      "https://host/a/%2E/v1",
+      "https://host/a/.%2e/v1",
+      "https://host/a/%2e./v1",
+      "https://host/a/%2e%2e/v1",
+      "https://host/%2e%2e/v1",
+      "https://host/a//../v1",
+      "https://host/a///../v1",
+      "https://host//a/../v1",
+      "https://host/a/b/../../v1",
+      "https://host/a/../../v1",
+      "https://host/../../v1",
+      "https://host/a/..//v1",
+      "https://host/a/.//v1",
+      "https://host/a/.",
+      "https://host/a/..",
+      "https://host/a//v1",
+      "https://host/a/%2f/v1",
+      "https://host/a/%2Ehidden/v1",
+    ];
+
+    expect(normalizeWithInjectedPython(values)).toEqual(
+      values.map((value) => normalizeModelEndpointUrl(value)),
+    );
   });
 
   it("does not install the model library endpoint twice", () => {
