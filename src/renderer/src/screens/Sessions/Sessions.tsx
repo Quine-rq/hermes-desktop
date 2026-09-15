@@ -465,6 +465,10 @@ function Sessions({
     } catch (error) {
       // Preserve the last visible list; the next focus/timer tick can retry.
       console.error("Failed to refresh sessions", error);
+    } finally {
+      // A quiet refresh can supersede a visible load; the latest request
+      // owns its spinner as well as its result, including on failure.
+      if (loadRequestId.current === requestId) setLoading(false);
     }
   }, [connectionId, profile]);
 

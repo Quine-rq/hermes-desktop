@@ -58,3 +58,7 @@ A previous connection or profile deletion cannot remove rows from the newly sele
 ## Visible batch failure
 
 Failed batch deletion retains visible history and displays an error.
+
+## Deletion supersedes visible loading
+
+A quiet refresh after deletion owns the loading state of any superseded visibility reload, including when refresh fails, so the list cannot remain stuck behind a spinner.

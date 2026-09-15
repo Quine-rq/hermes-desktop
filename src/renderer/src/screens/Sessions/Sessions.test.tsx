@@ -1026,3 +1026,43 @@ it("keeps selected history and reports a failed batch deletion", async () => {
     log.mockRestore();
   }
 });
+
+// @lat: [[ssh-session-delete#Deletion supersedes visible loading]]
+it("releases loading when deletion supersedes a visibility reload", async () => {
+  vi.useRealTimers();
+  localStorage.clear();
+  const api = installHermesAPI([
+    {
+      id: "pending",
+      title: "Pending chat",
+      startedAt: Date.now() / 1000,
+      source: "desktop",
+      messageCount: 1,
+      model: "test",
+    },
+  ]);
+  const view = render(<Sessions {...baseProps} visible />);
+  await screen.findByText("Pending chat");
+  fireEvent.click(screen.getByRole("button", { name: "sessions.delete" }));
+  view.rerender(<Sessions {...baseProps} visible={false} />);
+  let finish!: (items: []) => void;
+  api.syncSessionCache.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+  );
+  view.rerender(<Sessions {...baseProps} visible />);
+  expect(view.container.querySelector(".sessions-loading")).not.toBeNull();
+  api.syncSessionCache.mockResolvedValue([]);
+  fireEvent.click(
+    screen.getByRole("button", { name: "sessions.deleteConfirmAction" }),
+  );
+  await waitFor(() => expect(api.deleteSession).toHaveBeenCalled());
+  await act(async () => {
+    finish([]);
+  });
+  await waitFor(() =>
+    expect(view.container.querySelector(".sessions-loading")).toBeNull(),
+  );
+});
