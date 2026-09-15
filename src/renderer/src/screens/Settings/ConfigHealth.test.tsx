@@ -140,7 +140,7 @@ it("retains a successful fix result if its follow-up audit fails", async () => {
 });
 
 // @lat: [[config-health-navigation#Unmount ignores pending work]]
-it("does not publish a completed fix audit after leaving the pane", async () => {
+it("refreshes the scoped report after a successful fix outlives its pane", async () => {
   let finish!: (value: { ok: boolean }) => void;
   fix.mockImplementation(
     () =>
@@ -152,9 +152,22 @@ it("does not publish a completed fix audit after leaving the pane", async () => 
   fireEvent.click(
     await screen.findByRole("button", { name: "diagnose.fix.apply" }),
   );
-  view.unmount();
-  await act(async () => finish({ ok: true }));
-  expect(rerun).not.toHaveBeenCalled();
+  const publish = vi.spyOn(window, "dispatchEvent");
+  try {
+    view.unmount();
+    await act(async () => finish({ ok: true }));
+    expect(rerun).toHaveBeenCalledWith("research");
+    const events = publish.mock.calls
+      .map(([event]) => event)
+      .filter((event) => event.type === CONFIG_HEALTH_UPDATED_EVENT);
+    expect(events).toHaveLength(1);
+    expect((events[0] as CustomEvent).detail).toMatchObject({
+      profile: "research",
+      issues: [],
+    });
+  } finally {
+    publish.mockRestore();
+  }
 });
 
 // @lat: [[config-health-navigation#Audit request deduplication]]

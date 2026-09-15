@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, expect, it, vi } from "vitest";
 import { ConfigHealthBanner } from "../ConfigHealthBanner";
 import { SettingsModalProvider } from "./SettingsModalProvider";
@@ -58,7 +58,9 @@ it("opens the current profile's configuration details from a real banner click",
   fireEvent.click(
     await screen.findByRole("button", { name: "diagnose.banner.showDetails" }),
   );
-  expect(await screen.findByText("Missing key for research")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByText("Missing key for research")).toBeVisible(),
+  );
   expect(screen.getByRole("dialog")).toBeVisible();
 });
 
@@ -76,5 +78,7 @@ it("allows repeated details navigation without creating duplicate dialogs", asyn
   await screen.findByText("Missing key for research");
   fireEvent.click(details);
   expect(screen.getAllByRole("dialog")).toHaveLength(1);
-  expect(screen.getByText("Missing key for research")).toBeVisible();
+  await waitFor(() =>
+    expect(screen.getByText("Missing key for research")).toBeVisible(),
+  );
 });

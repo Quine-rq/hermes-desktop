@@ -33,7 +33,7 @@ A successful fix followed by an audit failure retains its result and offers an a
 
 ## Unmount ignores pending work
 
-Leaving the pane invalidates pending work so it cannot refresh or publish reports after unmount.
+Leaving the pane suppresses obsolete component state updates. A successful mutation still reruns its profile-scoped audit and publishes the result to mounted observers.
 
 ## Audit request deduplication
 

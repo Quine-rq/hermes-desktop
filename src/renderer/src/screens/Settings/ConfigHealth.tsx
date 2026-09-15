@@ -129,22 +129,24 @@ function ConfigHealthReport({
           profile,
           issue.context,
         );
-        if (id !== request.current) return;
-        setResults((prev) => ({
-          ...prev,
-          [issue.code]:
-            res.message ||
-            (res.ok ? t("diagnose.fix.success") : t("diagnose.fix.failure")),
-        }));
+        if (id === request.current) {
+          setResults((prev) => ({
+            ...prev,
+            [issue.code]:
+              res.message ||
+              (res.ok ? t("diagnose.fix.success") : t("diagnose.fix.failure")),
+          }));
+        }
         if (res.ok) {
           // A successful mutation followed by a failed audit must remain visible.
           try {
             const next = (await window.hermesAPI.rerunConfigHealth(
               profile,
             )) as Report;
-            if (id !== request.current) return;
-            setReport(next);
+            // The mutation outlives the pane. Refresh profile-scoped observers
+            // even after navigation, while suppressing obsolete local state.
             publishConfigHealthReport(next);
+            if (id === request.current) setReport(next);
           } catch {
             if (id === request.current) setError(true);
           }
