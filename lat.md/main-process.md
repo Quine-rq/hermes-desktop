@@ -114,6 +114,8 @@ The outer command uses `exec /bin/sh -c`, leaving stdin available for existing P
 
 Quotes and backslashes are escaped outside single-quoted spans, preserving command bytes under both fish and POSIX parsing. POSIX-only single quoting is insufficient because fish also interprets backslashes within single quotes.
 
+CI installs fish and sets `HERMES_TEST_FISH=1`, running the same byte, stdin, stderr and exit-status checks through both parsers on every PR. A missing fish binary fails these checks; it does not silently skip them.
+
 ### Input and failure preservation
 
 The wrapper forwards stdin, stdout, stderr and exit status unchanged. SSH errors continue through the existing sanitizer and timeout handling.
