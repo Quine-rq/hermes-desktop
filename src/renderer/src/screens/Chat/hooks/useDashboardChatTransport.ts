@@ -1020,11 +1020,23 @@ export function useDashboardChatTransport({
     [cancelScheduledFlush, setMessages],
   );
 
-  const expirePendingClarifyRef = useRef<() => void>(() => undefined);
-  expirePendingClarifyRef.current = (): void => {
+  const expirePendingClarifyRef = useRef<(failActiveTurn?: boolean) => void>(
+    () => undefined,
+  );
+  expirePendingClarifyRef.current = (failActiveTurn = false): void => {
     const pending = pendingClarifyRef.current;
     pendingClarifyRef.current = null;
     if (!pending) return;
+    if (
+      failActiveTurn &&
+      pending.responding &&
+      activeTurnRef.current === pending.activeTurn
+    ) {
+      if (activeTurnRef.current) activeTurnRef.current.status = "failed";
+      activeTurnRef.current = null;
+      setToolProgress(null);
+      setIsLoading(false);
+    }
     setMessages((current) =>
       current.map((message) =>
         message.kind === "clarify" &&
@@ -1413,7 +1425,7 @@ export function useDashboardChatTransport({
             onEvent: handleGatewayEvent,
             onClose: () => {
               if (clientRef.current === client) {
-                expirePendingClarifyRef.current();
+                expirePendingClarifyRef.current(true);
                 expirePendingApprovalsRef.current(true);
                 clientRef.current = null;
               }

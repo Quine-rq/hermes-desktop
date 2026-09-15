@@ -25,6 +25,7 @@ const dashboardMock = vi.hoisted(() => ({
     connected: boolean;
     request: ReturnType<typeof vi.fn>;
   }>,
+  onClose: null as (() => void) | null,
   onEvent: null as ((event: DashboardRpcEvent) => void) | null,
   request: vi.fn(),
 }));
@@ -37,15 +38,20 @@ vi.mock("../dashboardGatewayClient", () => ({
     request = dashboardMock.request;
 
     constructor(
-      options: { onEvent?: (event: DashboardRpcEvent) => void } = {},
+      options: {
+        onEvent?: (event: DashboardRpcEvent) => void;
+        onClose?: () => void;
+      } = {},
     ) {
       dashboardMock.onEvent = options.onEvent ?? null;
+      dashboardMock.onClose = options.onClose ?? null;
       dashboardMock.instances.push(this);
     }
   },
 }));
 
 interface HarnessApi {
+  isLoading?: boolean;
   activeTurnRef?: MutableRefObject<ActiveTurn | null>;
   abort?: () => void;
   messages?: ChatMessage[];
@@ -103,6 +109,7 @@ function Harness({
       turnId: "turn-bad",
     },
   ]);
+  const [isLoading, setIsLoading] = useState(false);
   const [model, setModel] = useState("bad-model");
   const [provider, setProvider] = useState("bad-provider");
   const [connectionMode, setConnectionMode] = useState<
@@ -123,7 +130,7 @@ function Harness({
     profile: undefined,
     provider,
     setHermesSessionId: vi.fn(),
-    setIsLoading: vi.fn(),
+    setIsLoading,
     setMessages,
     setToolProgress: vi.fn(),
     setUsage,
@@ -135,6 +142,7 @@ function Harness({
     // object. Object.assign mutates it in place (same reference the test
     // holds) without per-prop assignment, which the immutability rule rejects.
     Object.assign(api, {
+      isLoading,
       activeTurnRef,
       abort: transport.abort,
       messages,
@@ -147,6 +155,7 @@ function Harness({
       setProvider,
     });
   }, [
+    isLoading,
     activeTurnRef,
     api,
     messages,
@@ -270,6 +279,36 @@ describe("useDashboardChatTransport recovery", () => {
     expect(dashboardMock.request).toHaveBeenLastCalledWith("clarify.respond", {
       request_id: "q2",
       answer: "EU",
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Disconnect during answer]]
+  it("releases the busy turn when the socket closes before clarify RPC rejects", async () => {
+    const api = await clarifyHarness();
+    let reject!: (reason: Error) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((_resolve, fail) => {
+          reject = fail;
+        }),
+    );
+    let answer!: Promise<boolean>;
+    act(() => {
+      answer = api.respondClarify!("q1", "yes");
+    });
+    expect(api.isLoading).toBe(true);
+    await act(async () => {
+      dashboardMock.onClose?.();
+      reject(new Error("socket closed"));
+      await answer;
+    });
+    expect(api.isLoading).toBe(false);
+    expect(api.activeTurnRef?.current).toBeNull();
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    await act(async () => {
+      expect(await api.send?.("retry after disconnect")).toBe(true);
     });
   });
 

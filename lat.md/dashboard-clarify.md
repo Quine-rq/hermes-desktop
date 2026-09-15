@@ -46,3 +46,7 @@ Expired cards disable answer controls and explain that the question no longer ac
 ## Consecutive questions
 
 A late acknowledgement resolves its original question without clearing the next pending question.
+
+## Disconnect during answer
+
+Closing the active socket while a clarification response is pending clears that turn and loading state, expires the card, and leaves the composer available for recovery.
