@@ -1320,37 +1320,46 @@ export function useDashboardChatTransport({
         }
       }
 
-      if (event.type === "clarify.request") {
+      if (event.type === "clarify.expire" || event.type === "clarify.request") {
         const payload =
           event.payload && typeof event.payload === "object"
             ? (event.payload as { request_id?: unknown })
             : {};
         const requestId =
           typeof payload.request_id === "string" ? payload.request_id : "";
-        if (requestId) {
-          if (pendingClarifyRef.current?.requestId !== requestId) {
-            expirePendingClarifyRef.current();
-            const card = messagesRef.current.find(
-              (message) =>
-                message.kind === "clarify" && message.requestId === requestId,
-            );
-            if (
-              card?.kind === "clarify" &&
-              !card.resolved &&
-              !card.unavailable
-            ) {
-              pendingClarifyRef.current = {
-                requestId,
-                sessionId: runtimeSessionId,
-                responding: false,
-                activeTurn: activeTurnRef.current,
-              };
-            }
+        const pending = pendingClarifyRef.current;
+        if (event.type === "clarify.expire") {
+          if (!requestId || pending?.requestId !== requestId) return;
+          expirePendingClarifyRef.current();
+          // The Agent's blocking prompt returns on timeout and the original
+          // turn resumes. Keep tracking it until message.complete arrives.
+          if (pending.activeTurn?.status === "running") {
+            activeTurnRef.current = pending.activeTurn;
+            setIsLoading(true);
           }
-          activeTurnRef.current = null;
-          setToolProgress(null);
-          setIsLoading(false);
+          return;
         }
+        // Replays must not retire a newer question or clear a turn that has
+        // already resumed while its answer RPC is still being acknowledged.
+        if (!requestId || pending?.requestId === requestId) return;
+        const card = messagesRef.current.find(
+          (message) =>
+            message.kind === "clarify" &&
+            message.responsePath === "dashboard" &&
+            message.requestId === requestId,
+        );
+        if (card?.kind !== "clarify" || card.resolved || card.unavailable)
+          return;
+        expirePendingClarifyRef.current();
+        pendingClarifyRef.current = {
+          requestId,
+          sessionId: runtimeSessionId,
+          responding: false,
+          activeTurn: activeTurnRef.current,
+        };
+        activeTurnRef.current = null;
+        setToolProgress(null);
+        setIsLoading(false);
       }
     },
     [

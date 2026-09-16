@@ -312,6 +312,127 @@ describe("useDashboardChatTransport recovery", () => {
     });
   });
 
+  // @lat: [[dashboard-clarify#Stale request isolation]]
+  it.each(["answered", "completed"])(
+    "preserves the next question when an %s question is replayed",
+    async (state) => {
+      const api = await clarifyHarness();
+      await act(async () => {
+        if (state === "answered") await api.respondClarify!("q1", "staging");
+        else
+          dashboardMock.onEvent?.({
+            type: "message.complete",
+            session_id: "live",
+            payload: { text: "Done" },
+          });
+        dashboardMock.onEvent?.({
+          type: "clarify.request",
+          session_id: "live",
+          payload: { request_id: "q2", question: "Region?", choices: ["EU"] },
+        });
+        dashboardMock.onEvent?.({
+          type: "clarify.request",
+          session_id: "live",
+          payload: {
+            request_id: "q1",
+            question: "Where?",
+            choices: ["staging"],
+          },
+        });
+      });
+      expect(
+        api.messages?.find((m) => m.kind === "clarify" && m.requestId === "q2"),
+      ).toMatchObject({ unavailable: false });
+      await act(async () => {
+        expect(await api.respondClarify!("q2", "EU")).toBe(true);
+      });
+    },
+  );
+
+  // @lat: [[dashboard-clarify#In-flight request replay]]
+  it("keeps a resumed turn busy when its question is replayed during delivery", async () => {
+    const api = await clarifyHarness();
+    let finish!: (value: { status: string }) => void;
+    dashboardMock.request.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          finish = resolve;
+        }),
+    );
+    let reply!: Promise<boolean>;
+    act(() => {
+      reply = api.respondClarify!("q1", "staging");
+    });
+    const resumedTurn = api.activeTurnRef?.current;
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.request",
+        session_id: "live",
+        payload: { request_id: "q1", question: "Where?", choices: ["staging"] },
+      });
+    });
+    expect(api.isLoading).toBe(true);
+    expect(api.activeTurnRef?.current).toBe(resumedTurn);
+    await act(async () => {
+      finish({ status: "ok" });
+      await reply;
+    });
+  });
+
+  // @lat: [[dashboard-clarify#Gateway expiration]]
+  it("expires only the matching question and tracks the agent resuming after timeout", async () => {
+    const api = await clarifyHarness();
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.expire",
+        session_id: "live",
+        payload: { request_id: "old" },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: false,
+    });
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.expire",
+        session_id: "other",
+        payload: { request_id: "q1" },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: false,
+    });
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "clarify.expire",
+        session_id: "live",
+        payload: { request_id: "q1" },
+      });
+    });
+    expect(api.messages?.find((m) => m.kind === "clarify")).toMatchObject({
+      unavailable: true,
+    });
+    expect(api.isLoading).toBe(true);
+    expect(api.activeTurnRef?.current?.turnId).toBe("turn-bad");
+    await act(async () => {
+      expect(await api.respondClarify!("q1", "staging")).toBe(false);
+    });
+    expect(
+      dashboardMock.request.mock.calls.some(
+        ([method]) => method === "clarify.respond",
+      ),
+    ).toBe(false);
+    act(() => {
+      dashboardMock.onEvent?.({
+        type: "message.complete",
+        session_id: "live",
+        payload: { text: "Continued after timeout" },
+      });
+    });
+    expect(api.isLoading).toBe(false);
+    expect(api.activeTurnRef?.current).toBeNull();
+  });
+
   // @lat: [[dashboard-clarify#Composer fallback]]
   it("uses the same delivery path when answering through the composer", async () => {
     const api = await clarifyHarness();

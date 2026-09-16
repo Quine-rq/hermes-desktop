@@ -50,3 +50,15 @@ A late acknowledgement resolves its original question without clearing the next 
 ## Disconnect during answer
 
 Closing the active socket while a clarification response is pending clears that turn and loading state, expires the card, and leaves the composer available for recovery.
+
+## Stale request isolation
+
+Replaying an answered or completed question cannot expire the newer question that is waiting for a response.
+
+## In-flight request replay
+
+Replaying a question while its answer is being delivered preserves the resumed turn and its busy state.
+
+## Gateway expiration
+
+A matching clarify.expire event disables the timed-out card and restores tracking of the resumed agent turn. Events for another request or session leave the current question untouched.
