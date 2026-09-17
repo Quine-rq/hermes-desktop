@@ -102,7 +102,7 @@ Configured custom-provider cards are the **union** of three sources, deduped by 
 
 Configured provider identities remain visible when the supplemental model library cannot be read; successful legacy reads still recover providers when the identity store is unavailable.
 
-[[src/renderer/src/components/ProviderKeysSection.tsx#ProviderKeysSection]] isolates the two reads, preserving authoritative names and endpoints through a failed model-library request. A later model-library change retries discovery. [[src/renderer/src/components/ProviderKeysSection.test.tsx]] verifies failure and recovery through rendered cards.
+[[src/renderer/src/components/ProviderKeysSection.tsx#ProviderKeysSection]] keeps independent last-successful snapshots for provider identities and legacy models within the current profile. Failed reads retain only that source; successful empty reads clear it. Request sequencing rejects older refresh results, and profile changes or unmount invalidate pending work and discard the previous profile’s snapshots. A later change event retries discovery. [[src/renderer/src/components/ProviderKeysSection.test.tsx]] verifies failure and recovery through rendered cards.
 
 #### Credential readiness
 

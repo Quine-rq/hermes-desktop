@@ -11,8 +11,8 @@ const api = {
   onCustomProvidersChanged: vi.fn(),
 };
 
-function renderProviders(): void {
-  render(
+function providers(profile = "work"): React.JSX.Element {
+  return (
     <ProviderKeysSection
       items={[]}
       env={{}}
@@ -22,9 +22,41 @@ function renderProviders(): void {
       onBlur={vi.fn()}
       onToggleVisibility={vi.fn()}
       onRemove={vi.fn()}
-      profile="work"
-    />,
+      profile={profile}
+    />
   );
+}
+
+function renderProviders(): void {
+  render(providers());
+}
+
+function deferred<T>(): {
+  promise: Promise<T>;
+  resolve: (value: T) => void;
+  reject: (reason: Error) => void;
+} {
+  let resolve!: (value: T) => void;
+  let reject!: (reason: Error) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const legacy = [
+  {
+    provider: "custom",
+    providerLabel: "Legacy endpoint",
+    baseUrl: "http://localhost:9000/v1",
+  },
+];
+
+async function refresh(): Promise<void> {
+  await act(async () => {
+    api.onModelLibraryChanged.mock.calls.at(-1)![0]();
+  });
 }
 
 beforeEach(() => {
@@ -117,5 +149,94 @@ describe("custom provider loading", () => {
       api.onCustomProvidersChanged.mock.calls[0][0]();
     });
     expect(await screen.findByText("Local workstation")).toBeVisible();
+  });
+
+  it("retains the last successful legacy read through an outage, but honors a successful empty read", async () => {
+    api.listModels.mockResolvedValue(legacy);
+    renderProviders();
+    expect(await screen.findByText("Legacy endpoint")).toBeVisible();
+    api.listModels.mockRejectedValueOnce(new Error("offline"));
+    await refresh();
+    expect(screen.getByText("Legacy endpoint")).toBeVisible();
+    api.listModels.mockResolvedValue([]);
+    await refresh();
+    expect(screen.queryByText("Legacy endpoint")).not.toBeInTheDocument();
+  });
+
+  it("retains store identities on failure without reviving them after a successful deletion", async () => {
+    api.listModels.mockResolvedValue(legacy);
+    renderProviders();
+    expect(await screen.findByText("Local workstation")).toBeVisible();
+    api.listCustomProviders.mockRejectedValueOnce(new Error("offline"));
+    await refresh();
+    expect(screen.getByText("Local workstation")).toBeVisible();
+    api.listCustomProviders.mockResolvedValue([]);
+    api.listModels.mockRejectedValue(new Error("offline"));
+    await refresh();
+    expect(screen.queryByText("Local workstation")).not.toBeInTheDocument();
+    expect(screen.getByText("Legacy endpoint")).toBeVisible();
+    api.listCustomProviders.mockRejectedValue(new Error("offline"));
+    await refresh();
+    expect(screen.queryByText("Local workstation")).not.toBeInTheDocument();
+    expect(screen.getByText("Legacy endpoint")).toBeVisible();
+  });
+
+  it.each([false, true])(
+    "ignores an older model-library response (failure: %s)",
+    async (fail) => {
+      renderProviders();
+      expect(await screen.findByText("Local workstation")).toBeVisible();
+      const older = deferred<typeof legacy>();
+      api.listModels.mockReturnValueOnce(older.promise);
+      await refresh();
+      api.listModels.mockResolvedValue(legacy);
+      await refresh();
+      expect(screen.getByText("Legacy endpoint")).toBeVisible();
+      await act(async () => {
+        if (fail) older.reject(new Error("offline"));
+        else older.resolve([]);
+      });
+      expect(screen.getByText("Legacy endpoint")).toBeVisible();
+    },
+  );
+
+  it("clears profile-specific snapshots and ignores late responses from the previous profile", async () => {
+    api.listModels.mockResolvedValue(legacy);
+    const view = render(providers());
+    expect(await screen.findByText("Legacy endpoint")).toBeVisible();
+    const older = deferred<typeof legacy>();
+    api.listModels.mockReturnValueOnce(older.promise);
+    await refresh();
+    api.listCustomProviders.mockResolvedValue([
+      { name: "Personal endpoint", baseUrl: "http://localhost:7000/v1" },
+    ]);
+    api.listModels.mockRejectedValue(new Error("offline"));
+    view.rerender(providers("personal"));
+    expect(screen.queryByText("Legacy endpoint")).not.toBeInTheDocument();
+    expect(await screen.findByText("Personal endpoint")).toBeVisible();
+    await act(async () => {
+      older.resolve(legacy);
+    });
+    expect(screen.getByText("Personal endpoint")).toBeVisible();
+    expect(screen.queryByText("Local workstation")).not.toBeInTheDocument();
+    expect(screen.queryByText("Legacy endpoint")).not.toBeInTheDocument();
+  });
+
+  it("unsubscribes and ignores a pending response after unmount", async () => {
+    const pending = deferred<typeof legacy>();
+    const offModels = vi.fn();
+    const offProviders = vi.fn();
+    api.onModelLibraryChanged.mockReturnValue(offModels);
+    api.onCustomProvidersChanged.mockReturnValue(offProviders);
+    api.listModels.mockReturnValue(pending.promise);
+    const view = render(providers());
+    await act(async () => {});
+    view.unmount();
+    await act(async () => {
+      pending.resolve(legacy);
+    });
+    expect(offModels).toHaveBeenCalledOnce();
+    expect(offProviders).toHaveBeenCalledOnce();
+    expect(screen.queryByText("Legacy endpoint")).not.toBeInTheDocument();
   });
 });
