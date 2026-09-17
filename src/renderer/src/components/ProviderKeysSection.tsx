@@ -587,11 +587,16 @@ export function ProviderKeysSection({
       /* store unavailable — fall back to the models-derived list below */
     }
 
-    const all = (await window.hermesAPI.listModels()) as LibModel[];
-    for (const m of all) {
-      if (m.provider !== "custom" || !m.baseUrl) continue;
-      if (expectedEnvKeyForUrl(m.baseUrl) !== CUSTOM_API_KEY_ENV) continue;
-      push(m.providerLabel || hostOf(m.baseUrl), m.baseUrl);
+    try {
+      const all = (await window.hermesAPI.listModels()) as LibModel[];
+      for (const m of all) {
+        if (m.provider !== "custom" || !m.baseUrl) continue;
+        if (expectedEnvKeyForUrl(m.baseUrl) !== CUSTOM_API_KEY_ENV) continue;
+        push(m.providerLabel || hostOf(m.baseUrl), m.baseUrl);
+      }
+    } catch {
+      // Legacy models supplement the authoritative provider records. A failed
+      // library read must not hide providers whose identities loaded correctly.
     }
     setStoredProviders(list);
   }, [profile]);
