@@ -102,6 +102,30 @@ Linux uses Python's xattr APIs; macOS uses [Apple's fcopyfile](https://developer
 
 Read, fsync, and replacement failures leave the original credential file byte-identical, clean up temporary files, and reach the caller as errors.
 
+## SSH login shell
+
+[[src/main/ssh-remote.ts#sshExec]] wraps POSIX commands with [[src/main/ssh-command.ts#buildSshRemoteCommand]] so a fish login shell cannot reinterpret assignments or control flow. Remote hosts must provide `/bin/sh`.
+
+### Explicit POSIX interpreter
+
+The outer command uses `exec /bin/sh -c`, leaving stdin available for existing Python and file-write operations. Interactive shell configuration and the user's login shell are not changed.
+
+### Command byte preservation
+
+Quotes and backslashes are escaped outside single-quoted spans, preserving command bytes under both fish and POSIX parsing. POSIX-only single quoting is insufficient because fish also interprets backslashes within single quotes.
+
+CI installs fish and sets `HERMES_TEST_FISH=1`, running the same byte, stdin, stderr and exit-status checks through both parsers on every PR. A missing fish binary fails these checks; it does not silently skip them.
+
+### Input and failure preservation
+
+The wrapper forwards stdin, stdout, stderr and exit status unchanged. SSH errors continue through the existing sanitizer and timeout handling.
+
+### Live fish endpoint
+
+Opt-in tests exercise real OpenSSH with a disposable root account using fish: POSIX commands, dashboard probing, token and port persistence, file stdin, health checks, failure feedback and retry.
+
+Set `HERMES_TEST_SSH_KEY` to an ephemeral key and optionally `HERMES_TEST_SSH_PORT` (default 19322) for a disposable loopback SSH container. Provide Python 3, `/bin/sh`, fish as root's login shell, and an HTTP `/health` fixture on container port 19864. Run `vitest run tests/ssh-login-shell-live.test.ts`. These tests write fixture data under the container's `~/.hermes`; never point them at a real account.
+
 ## SSH dashboard transport
 
 SSH mode has two chat transports because the remote serves chat from **two different servers**, and the desktop must reach the right one.
@@ -164,3 +188,5 @@ Legacy SSH sessions can be deleted without a dashboard. The selected connection 
 [[src/main/ipc/register.ts#withSshDashboardSessions]] uses [[src/main/ssh-remote.ts#sshDeleteSession]] and [[src/main/ssh-remote.ts#sshDeleteSessions]] as the legacy/auto fallbacks. [[src/main/ssh-session-delete.ts#SSH_SESSION_DELETE_SCRIPT]] receives JSON via stdin, validates the profile, and uses parameterized SQL in one `BEGIN IMMEDIATE` transaction. It removes selected messages and optional desktop metadata, detaches children, and rolls the whole batch back on failure. The database is opened in existing-file mode; a missing database is not created. SSH errors propagate to the renderer. The SSH session listing reads state.db directly, so no local cache or user files are touched. Tests: [[ssh-session-delete]].
 
 [[src/renderer/src/screens/Sessions/Sessions.tsx#Sessions]] keeps rows until deletion is acknowledged, reports failures, and refreshes after the attempt. In-flight results are discarded after changing connection/profile, updating connection settings, or unmounting. Confirmation remains explicit and concurrent delete submissions are blocked.
+
+The deletion command passes through [[src/main/ssh-command.ts#buildSshRemoteCommand]] before SSH executes it, preserving the POSIX interpreter boundary while leaving the selected IDs and profile on stdin.
