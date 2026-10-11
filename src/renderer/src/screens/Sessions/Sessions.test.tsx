@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import toast from "react-hot-toast";
 
 // useI18n needs an I18nProvider; the Sessions tab only uses `t` for labels,
 // so a pass-through mock keeps these tests focused on the refresh behaviour.
@@ -16,6 +17,8 @@ vi.mock("../../components/useI18n", () => ({
     setLocale: () => {},
   }),
 }));
+
+vi.mock("react-hot-toast", () => ({ default: { error: vi.fn() } }));
 
 import Sessions, { SESSIONS_REFRESH_MS } from "./Sessions";
 
@@ -878,6 +881,7 @@ describe("Sessions scope isolation", () => {
   beforeEach(() => {
     localStorage.clear();
     vi.useRealTimers();
+    vi.mocked(toast.error).mockClear();
   });
 
   const row = (
@@ -971,6 +975,47 @@ describe("Sessions scope isolation", () => {
     ).toBeNull();
     expect(api.deleteSessions).not.toHaveBeenCalled();
   });
+
+  // @lat: [[connections#Connections#Test specifications#Connection-explicit session browsing#Suppresses stale rename failures]]
+  it.each([
+    { connectionId: "connection-two", profile: "work" },
+    { connectionId: "connection-one", profile: "personal" },
+  ])(
+    "suppresses failed rename notifications after switching to %j",
+    async (scope) => {
+      const api = installHermesAPI([row("Old scope")]);
+      let rejectRename!: (error: Error) => void;
+      api.updateSessionTitle.mockImplementation(
+        () =>
+          new Promise<void>((_resolve, reject) => {
+            rejectRename = reject;
+          }),
+      );
+      const view = render(<Sessions {...baseProps} visible />);
+      await screen.findByText("Old scope");
+      fireEvent.click(screen.getByRole("button", { name: "sessions.rename" }));
+      const renameInput = screen.getAllByRole("textbox")[1];
+      fireEvent.change(renameInput, { target: { value: "Pending rename" } });
+      fireEvent.keyDown(renameInput, { key: "Enter" });
+      expect(api.updateSessionTitle).toHaveBeenCalledExactlyOnceWith(
+        "shared-id",
+        "Pending rename",
+        "connection-one",
+        "work",
+      );
+
+      api.syncSessionCache.mockResolvedValue([row("New scope")]);
+      view.rerender(<Sessions {...baseProps} {...scope} visible />);
+      await screen.findByText("New scope");
+      await act(async () => {
+        rejectRename(new Error("Old scope rename failed"));
+      });
+
+      expect(toast.error).not.toHaveBeenCalled();
+      expect(screen.getByText("New scope")).toBeTruthy();
+      expect(screen.queryByText("Pending rename")).toBeNull();
+    },
+  );
 
   it("preserves a confirmation for ordinary rerenders in the same scope", async () => {
     const api = installHermesAPI([row("Original")]);

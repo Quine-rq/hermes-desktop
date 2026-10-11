@@ -406,9 +406,12 @@ function ScopedSessions({
   const renameInputRef = useRef<HTMLInputElement>(null);
   const [renameSaving, setRenameSaving] = useState(false);
   const renameContext = `${connectionId}\0${profile}`;
-  const renameContextRef = useRef(renameContext);
+  const renameContextRef = useRef<string | null>(renameContext);
   useEffect(() => {
     renameContextRef.current = renameContext;
+    return () => {
+      renameContextRef.current = null;
+    };
   }, [renameContext]);
 
   useEffect(() => {

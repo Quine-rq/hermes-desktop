@@ -67,6 +67,8 @@ The Sessions view owns transient state within one connection and profile. Switch
 
 [[src/renderer/src/screens/Sessions/Sessions.tsx#Sessions]] keys the stateful browser by the complete scope. Persisted display filters remain shared preferences. Ordinary rerenders within one scope preserve pending actions.
 
+Unmounting invalidates the browser's rename context. A delayed rename failure from a discarded scope cannot show a global error notification after another connection or profile is selected.
+
 ### Connection-explicit dashboard transport
 
 Dashboard startup and WebSocket refresh resolve the chat's stable connection ID instead of consulting whichever record is currently selected.
@@ -130,6 +132,10 @@ Remote profile-list requests send the selected profile to the Agent dashboard in
 #### Keeps Local profile caches isolated
 
 Local cache synchronization reads the selected profile database, writes that profile's desktop cache, and cannot leak the default profile's sessions into the result.
+
+#### Suppresses stale rename failures
+
+A rename rejected after switching connection or profile cannot show an error notification or alter the new browser's rows, because the discarded browser no longer owns a current rename context.
 
 ### Non-destructive registry recovery
 
