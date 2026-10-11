@@ -114,20 +114,23 @@ it("deletes selected history and overlays while preserving unselected children",
 });
 
 // @lat: [[ssh-session-delete#Profile isolation and idempotence]]
-it("scopes deletion to the selected profile and normalizes duplicate ids", async () => {
-  const root = fixture();
-  const normal = seed(root);
-  const named = seed(root, "research");
-  expect(
-    await run(root, [" parent ", "parent", "", null, "missing"], "research"),
-  ).toEqual({ requested: 2, deleted: 1 });
-  expect(await run(root, ["parent"], "research")).toEqual({
-    requested: 1,
-    deleted: 0,
-  });
-  expect(JSON.parse(sql(normal, ""))).toHaveLength(3);
-  expect(JSON.parse(sql(named, ""))).toHaveLength(2);
-});
+it.each(["research", "_work"])(
+  "scopes deletion to profile %s and normalizes duplicate ids",
+  async (profile) => {
+    const root = fixture();
+    const normal = seed(root);
+    const named = seed(root, profile);
+    expect(
+      await run(root, [" parent ", "parent", "", null, "missing"], profile),
+    ).toEqual({ requested: 2, deleted: 1 });
+    expect(await run(root, ["parent"], profile)).toEqual({
+      requested: 1,
+      deleted: 0,
+    });
+    expect(JSON.parse(sql(normal, ""))).toHaveLength(3);
+    expect(JSON.parse(sql(named, ""))).toHaveLength(2);
+  },
+);
 
 // @lat: [[ssh-session-delete#Batch rollback]]
 it("rolls back every selected deletion if a later session cannot be deleted", async () => {

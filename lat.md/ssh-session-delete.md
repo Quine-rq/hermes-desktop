@@ -25,7 +25,7 @@ Deleting selected sessions removes messages and desktop overlays, detaches unsel
 
 ## Profile isolation and idempotence
 
-Only the selected profile changes; duplicate, blank and already-deleted identifiers are handled idempotently.
+Only the selected profile changes, including names beginning with an underscore; duplicate, blank and already-deleted identifiers are handled idempotently.
 
 ## Batch rollback
 

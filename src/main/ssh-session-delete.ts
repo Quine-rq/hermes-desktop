@@ -9,7 +9,7 @@ from pathlib import Path
 
 payload = json.load(sys.stdin)
 profile = payload.get("profile") or "default"
-if not isinstance(profile, str) or not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]*", profile):
+if not isinstance(profile, str) or not re.fullmatch(r"[A-Za-z0-9_][A-Za-z0-9._-]*", profile):
     raise ValueError("Invalid Hermes profile name")
 ids = list(dict.fromkeys(item.strip() for item in payload.get("sessionIds", []) if isinstance(item, str) and item.strip()))
 root = Path(os.path.expanduser("~/.hermes"))
