@@ -53,7 +53,7 @@ describe("createCronJob", () => {
     execFileSpy.mockClear();
   });
 
-  it("passes the prompt as the cron create positional argument before flags", async () => {
+  it("passes options before the positional argument delimiter", async () => {
     const { createCronJob } = await import("../src/main/cronjobs");
 
     await createCronJob(
@@ -69,15 +69,50 @@ describe("createCronJob", () => {
       "hermes_cli.main",
       "cron",
       "create",
-      "7 17 * * *",
-      "Create a daily brief with local news, weather, and quotes.",
       "--name",
       "Daily brief",
       "--deliver",
       "telegram",
+      "--",
+      "7 17 * * *",
+      "Create a daily brief with local news, weather, and quotes.",
     ]);
-    expect(execFileSpy.mock.calls[0][1]).not.toContain("--");
   });
+});
+
+describe("cron prompt argument boundaries", () => {
+  it.each(["--help", "--summarize", "-p"])(
+    "passes %s literally through the Agent's argparse contract",
+    async (prompt) => {
+      execFileSpy.mockClear();
+      const { createCronJob } = await import("../src/main/cronjobs");
+      await createCronJob("30m", prompt, "Daily brief", "local");
+      const { spawnSync } =
+        await vi.importActual<typeof import("child_process")>("child_process");
+      const script = `import argparse,json
+p=argparse.ArgumentParser()
+cron=p.add_subparsers().add_parser("cron")
+create=cron.add_subparsers().add_parser("create")
+create.add_argument("schedule")
+create.add_argument("prompt",nargs="?")
+create.add_argument("--name")
+create.add_argument("--deliver")
+print(json.dumps(vars(p.parse_args()),sort_keys=True))`;
+      const parsed = spawnSync(
+        process.platform === "win32" ? "python" : "python3",
+        ["-c", script, ...execFileSpy.mock.calls[0][1].slice(2)],
+        { encoding: "utf8" },
+      );
+      expect(parsed.status, parsed.stderr).toBe(0);
+      expect(parsed.stdout.trim()).toMatch(/^\{/);
+      expect(JSON.parse(parsed.stdout)).toEqual({
+        deliver: "local",
+        name: "Daily brief",
+        prompt,
+        schedule: "30m",
+      });
+    },
+  );
 });
 
 describe("local cron jobs", () => {

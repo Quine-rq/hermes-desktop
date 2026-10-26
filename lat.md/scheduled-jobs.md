@@ -121,3 +121,9 @@ Proxy 401 or 403 replies stop before history access; auto-selected OAuth failure
 ### History deferred proxy target
 
 Private settings changed while a real proxy discovery reply is pending revoke the captured history target before any cron request can be admitted.
+
+## Cron positional input boundary
+
+Local and named-profile SSH job creation pass schedule and prompt after an option delimiter. A prompt such as `--help` remains task text instead of producing a false successful help exit.
+
+[[src/main/cronjobs.ts#createCronJob]] places name and delivery options before the delimiter. [[tests/cronjobs.test.ts]] feeds captured subprocess arguments into Python argparse to verify option-looking prompts survive unchanged.
