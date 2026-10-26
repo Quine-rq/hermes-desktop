@@ -96,4 +96,4 @@ Remote and SSH selections remain usable without local provider secrets. Missing 
 
 Delayed fast-tier reads may update only their original profile and may not replace a newer explicit choice. Failed reads retain the normal-tier fallback.
 
-[[src/renderer/src/screens/Chat/hooks/useFastMode.ts#useFastMode]] invalidates reads on profile changes, unmount and selection. [[src/renderer/src/screens/Chat/hooks/useFastMode.test.ts]] verifies profile switches and read-versus-selection races.
+[[src/renderer/src/screens/Chat/hooks/useFastMode.ts#useFastMode]] invalidates reads on profile changes, unmount and selection. [[src/renderer/src/screens/Chat/hooks/useFastMode.test.ts]] verifies profile switches, read-versus-selection races, rejected-read fallback, and rejection after a newer selection or profile has taken ownership.
