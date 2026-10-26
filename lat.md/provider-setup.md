@@ -364,3 +364,9 @@ An isolated fixture selects the preset and enters a model ID and fake key. Actua
 Adding a direct nested setting expands an existing empty mapping, follows its sibling indentation and inserts a missing line break. Unsupported scalar or flow-map parents are rejected without changing the file.
 
 [[src/main/config.ts#appendDirectNestedYamlValue]] preserves parent comments and sibling values instead of appending duplicate parent keys. [[tests/config-value-paths.test.ts]] parses real saved files and verifies empty maps, CRLF, missing final newlines, nondefault indentation and refusal paths.
+
+### Nested insertion ownership validation
+
+Before inserting a missing direct setting, YAML parsing verifies the parent is a mapping and the child does not already belong to it. Lists fail without writes; quoted grandchildren and scalar text do not block unrelated direct settings.
+
+The existing text splice preserves comments and layout. Regression tests parse the saved document and cover unindented sequences, quoted direct children, grandchildren, block scalars and multiline quoted strings.

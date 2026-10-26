@@ -1,6 +1,7 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { randomBytes } from "crypto";
 import { dirname, join } from "path";
+import { load as loadYaml } from "js-yaml";
 import type { SpeechConfigSetting } from "../shared/minimax-speech";
 import { HERMES_HOME, expectedEnvKeyForModel } from "./installer";
 import {
@@ -623,6 +624,30 @@ function appendDirectNestedYamlValue(
   const [parent, child] = segments;
   if (!parent || !child) return null;
 
+  // The source layout decides where to splice, but only YAML semantics can
+  // distinguish direct keys from grandchildren or text in multiline scalars.
+  const document: unknown = loadYaml(content);
+  if (
+    document != null &&
+    (typeof document !== "object" || Array.isArray(document))
+  )
+    throw new Error("Cannot edit config.yaml: use a block mapping.");
+  const parentValue = (document as Record<string, unknown> | null)?.[parent];
+  if (
+    parentValue != null &&
+    (typeof parentValue !== "object" || Array.isArray(parentValue))
+  )
+    throw new Error(
+      `Cannot edit ${parent}: use a block mapping in config.yaml.`,
+    );
+  if (
+    parentValue != null &&
+    Object.prototype.hasOwnProperty.call(parentValue, child)
+  )
+    throw new Error(
+      `Cannot edit quoted ${child}: use a plain key in config.yaml.`,
+    );
+
   const newline = content.includes("\r\n") ? "\r\n" : "\n";
   const quotedValue = quoteYamlScalar(value);
   // Expand an empty flow map before locating the insertion point.
@@ -682,12 +707,6 @@ function appendDirectNestedYamlValue(
           );
         childIndent = indent;
       }
-      if (
-        new RegExp(`^[ \\t]*["']${escapeRegex(child)}["'][ \\t]*:`).test(line)
-      )
-        throw new Error(
-          `Cannot edit quoted ${child}: use a plain key in config.yaml.`,
-        );
     }
     blockEnd =
       lineEndExclusive === content.length

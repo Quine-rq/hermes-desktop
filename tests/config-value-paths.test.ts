@@ -63,6 +63,9 @@ describe("safe nested scalar insertion", () => {
     "network: disabled\n",
     '"network": {}\n',
     "network:\n  - one\n",
+    "network:\n- one\n",
+    "network:\r\n# keep comment\r\n- one\r\n",
+    'network:\n  "proxy": old\n',
   ])(
     "refuses unsupported parent syntax without replacing it: %j",
     async (before) => {
@@ -72,6 +75,27 @@ describe("safe nested scalar insertion", () => {
         setConfigValue("network.proxy", "http://localhost:8080"),
       ).toThrow();
       expect(readFileSync(join(TEST_DIR, "config.yaml"), "utf8")).toBe(before);
+    },
+  );
+});
+
+describe("nested insertion respects YAML ownership", () => {
+  it.each([
+    'network:\n  fallback:\n    "proxy": nested\n',
+    'network:\n  note: |\n    "proxy": text\n',
+    `network:\n  note: "first\n  'proxy': text\n  last"\n`,
+  ])(
+    "keeps unrelated nested or multiline text when inserting: %j",
+    async (before) => {
+      const parsedBefore = load(before) as { network: Record<string, unknown> };
+      writeFileSync(join(TEST_DIR, "config.yaml"), before);
+      const { setConfigValue } = await importConfigWithHome(TEST_DIR);
+      setConfigValue("network.proxy", "http://localhost:8080");
+      const after = readFileSync(join(TEST_DIR, "config.yaml"), "utf8");
+      expect(load(after)).toEqual({
+        network: { ...parsedBefore.network, proxy: "http://localhost:8080" },
+      });
+      expect(after).toContain(before.trimEnd());
     },
   );
 });
