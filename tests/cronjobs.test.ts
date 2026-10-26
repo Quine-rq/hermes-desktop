@@ -80,15 +80,43 @@ describe("createCronJob", () => {
   });
 });
 
+// Python is optional for the desktop development toolchain. Keep the
+// subprocess argument assertions unconditional and gate only argparse execution.
+const { spawnSync } =
+  await vi.importActual<typeof import("child_process")>("child_process");
+const python = process.platform === "win32" ? "python" : "python3";
+const hasPython = spawnSync(python, ["--version"]).status === 0;
+
 describe("cron prompt argument boundaries", () => {
   it.each(["--help", "--summarize", "-p"])(
+    "delimits %s as a literal prompt without requiring Python",
+    async (prompt) => {
+      execFileSpy.mockClear();
+      const { createCronJob } = await import("../src/main/cronjobs");
+      await createCronJob("30m", prompt, "Daily brief", "local");
+      expect(execFileSpy).toHaveBeenCalledTimes(1);
+      expect(execFileSpy.mock.calls[0][1]).toEqual([
+        "-m",
+        "hermes_cli.main",
+        "cron",
+        "create",
+        "--name",
+        "Daily brief",
+        "--deliver",
+        "local",
+        "--",
+        "30m",
+        prompt,
+      ]);
+    },
+  );
+
+  it.skipIf(!hasPython).each(["--help", "--summarize", "-p"])(
     "passes %s literally through the Agent's argparse contract",
     async (prompt) => {
       execFileSpy.mockClear();
       const { createCronJob } = await import("../src/main/cronjobs");
       await createCronJob("30m", prompt, "Daily brief", "local");
-      const { spawnSync } =
-        await vi.importActual<typeof import("child_process")>("child_process");
       const script = `import argparse,json
 p=argparse.ArgumentParser()
 cron=p.add_subparsers().add_parser("cron")
@@ -99,7 +127,7 @@ create.add_argument("--name")
 create.add_argument("--deliver")
 print(json.dumps(vars(p.parse_args()),sort_keys=True))`;
       const parsed = spawnSync(
-        process.platform === "win32" ? "python" : "python3",
+        python,
         ["-c", script, ...execFileSpy.mock.calls[0][1].slice(2)],
         { encoding: "utf8" },
       );
