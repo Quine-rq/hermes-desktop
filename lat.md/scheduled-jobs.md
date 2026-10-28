@@ -127,3 +127,5 @@ Private settings changed while a real proxy discovery reply is pending revoke th
 Run-output and preview limits preserve complete Unicode characters. Local reads retain enough overflow to report truncation accurately even when an omitted character occupies two UTF-16 units.
 
 [[src/main/cronjobs.ts#runTextPrefix]] is shared by local previews and local/remote output clipping. [[src/main/cronjobs.history.test.ts]] verifies split-boundary removal, intact characters at the exact limit and correct overflow flags.
+
+The local output read reserves two extra UTF-16 units so trimming a split surrogate pair cannot hide the fact that the file exceeds the display limit.

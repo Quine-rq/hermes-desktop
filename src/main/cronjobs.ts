@@ -1018,6 +1018,7 @@ export async function getCronRunOutput(
     if (!name.endsWith(".md")) throw new Error("Invalid run ID");
     const text = await readFilePreview(
       join(localRunDir(jobId, resolved.profile), name),
+      // Two extra UTF-16 units preserve overflow after trimming a split pair.
       MAX_RUN_OUTPUT_CHARS + 2,
     );
     assertCurrent();
